@@ -13,7 +13,13 @@ import (
 
 const lineSep = "- - - - - - - - - - - - - - - - - - - - - - - - - -"
 
-var verbose = false
+const (
+	logLevelNone = iota
+	logLevelMinimal
+	logLevelFull
+)
+
+var verbose = logLevelNone
 var count = 5
 
 func doPing(data *multiping.PingData) error {
@@ -23,7 +29,7 @@ func doPing(data *multiping.PingData) error {
 	}
 
 	fmt.Println("Ping results:")
-	if verbose {
+	if verbose == logLevelFull {
 		fmt.Println(lineSep)
 	}
 
@@ -34,6 +40,10 @@ func doPing(data *multiping.PingData) error {
 		var lossCount uint
 		var dupCount uint
 
+		if verbose == logLevelMinimal {
+			fmt.Println("- - - - - - - - - - - - - - - - - - - - - - - - - -")
+			fmt.Print("Ping lost: ")
+		}
 		// Print results
 		data.Iterate(func(ip netip.Addr, val multiping.PingStats) {
 			latencySum += val.Latency()
@@ -44,7 +54,8 @@ func doPing(data *multiping.PingData) error {
 				dupCount++
 			}
 
-			if verbose {
+			switch verbose {
+			case logLevelFull:
 				var additionalInfo string
 				if !val.Valid() || val.Duplicate() > 0 {
 					additionalInfo = "("
@@ -57,13 +68,20 @@ func doPing(data *multiping.PingData) error {
 				}
 				fmt.Printf("%16s\t%fms\t%f%%\t%s\n",
 					ip, val.Latency(), val.Loss()*100, additionalInfo)
+			case logLevelMinimal:
+				if val.Loss() > 0 {
+					fmt.Printf(" %s", ip.String())
+				}
 			}
 		})
 
-		if verbose {
-			fmt.Println("- - - - - - - - - - - - - - - - - - - - - - - - - -")
+		switch verbose {
+		case logLevelFull:
+		case logLevelMinimal:
+			fmt.Println()
 		}
-		fmt.Printf("\tPinged: %d, lossed: %d, averageLatency: %f, dupplicates: %d\n",
+
+		fmt.Printf("Pinged: %d, lost: %d, avg latency: %fms, dups: %d\n",
 			data.Count(), lossCount, latencySum/float32(data.Count()), dupCount)
 
 		data.Reset()
@@ -74,7 +92,7 @@ func doPing(data *multiping.PingData) error {
 func main() {
 	fileName := flag.String("f", "", "File with IP list")
 	flag.IntVar(&count, "c", 5, "Stop after sending count pings")
-	flag.BoolVar(&verbose, "v", false, "Verbose logging")
+	flag.IntVar(&verbose, "v", logLevelNone, "Verbose logging level [0|1|2]")
 
 	flag.Parse()
 	data := multiping.NewPingData()
