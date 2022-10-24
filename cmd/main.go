@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"flag"
+	"fmt"
 	"log"
 	"net/netip"
 	"os"
@@ -10,19 +11,35 @@ import (
 	"github.com/drgkaleda/go-multiping"
 )
 
+const lineSep = "- - - - - - - - - - - - - - - - - - - - - - - - - -"
+
 func doPing(data *multiping.PingData, count int) error {
 	mp, err := multiping.New(false)
 	if err != nil {
 		return err
 	}
 
+	fmt.Println("Ping results:")
+	fmt.Println(lineSep)
 	for i := 0; i < count; i++ {
 		mp.Ping(data)
 
 		// Print results
 		data.Iterate(func(ip netip.Addr, val multiping.PingStats) {
-			log.Println(ip, val.Valid(), val.Latency(), val.Loss(), val.Duplicate())
+			var additionalInfo string
+			if !val.Valid() || val.Duplicate() > 0 {
+				additionalInfo = "("
+				if !val.Valid() {
+					additionalInfo = additionalInfo + " invalid "
+				}
+				if val.Duplicate() > 0 {
+					additionalInfo = additionalInfo + fmt.Sprintf(" dupps=%d ", val.Duplicate())
+				}
+			}
+			fmt.Printf("%16s\t%fms\t%f%%\t%s\n",
+				ip, val.Latency(), val.Loss(), additionalInfo)
 		})
+		fmt.Println("- - - - - - - - - - - - - - - - - - - - - - - - - -")
 	}
 	return nil
 }
