@@ -13,40 +13,68 @@ import (
 
 const lineSep = "- - - - - - - - - - - - - - - - - - - - - - - - - -"
 
-func doPing(data *multiping.PingData, count int) error {
+var verbose = false
+var count = 5
+
+func doPing(data *multiping.PingData) error {
 	mp, err := multiping.New(false)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("Ping results:")
-	fmt.Println(lineSep)
+	if verbose {
+		fmt.Println(lineSep)
+	}
+
 	for i := 0; i < count; i++ {
 		mp.Ping(data)
 
+		var latencySum float32
+		var lossCount uint
+		var dupCount uint
+
 		// Print results
 		data.Iterate(func(ip netip.Addr, val multiping.PingStats) {
-			var additionalInfo string
-			if !val.Valid() || val.Duplicate() > 0 {
-				additionalInfo = "("
-				if !val.Valid() {
-					additionalInfo = additionalInfo + " invalid "
-				}
-				if val.Duplicate() > 0 {
-					additionalInfo = additionalInfo + fmt.Sprintf(" dupps=%d ", val.Duplicate())
-				}
+			latencySum += val.Latency()
+			if val.Loss() > 0 {
+				lossCount++
 			}
-			fmt.Printf("%16s\t%fms\t%f%%\t%s\n",
-				ip, val.Latency(), val.Loss(), additionalInfo)
+			if val.Duplicate() > 0 {
+				dupCount++
+			}
+
+			if verbose {
+				var additionalInfo string
+				if !val.Valid() || val.Duplicate() > 0 {
+					additionalInfo = "("
+					if !val.Valid() {
+						additionalInfo = additionalInfo + " invalid "
+					}
+					if val.Duplicate() > 0 {
+						additionalInfo = additionalInfo + fmt.Sprintf(" dupps=%d ", val.Duplicate())
+					}
+				}
+				fmt.Printf("%16s\t%fms\t%f%%\t%s\n",
+					ip, val.Latency(), val.Loss()*100, additionalInfo)
+			}
 		})
-		fmt.Println("- - - - - - - - - - - - - - - - - - - - - - - - - -")
+
+		if verbose {
+			fmt.Println("- - - - - - - - - - - - - - - - - - - - - - - - - -")
+		}
+		fmt.Printf("\tPinged: %d, lossed: %d, averageLatency: %f, dupplicates: %d\n",
+			data.Count(), lossCount, latencySum/float32(data.Count()), dupCount)
+
+		data.Reset()
 	}
 	return nil
 }
 
 func main() {
 	fileName := flag.String("f", "", "File with IP list")
-	count := flag.Int("c", 5, "Stop after sending count pings")
+	flag.IntVar(&count, "c", 5, "Stop after sending count pings")
+	flag.BoolVar(&verbose, "v", false, "Verbose logging")
 
 	flag.Parse()
 	data := multiping.NewPingData()
@@ -89,5 +117,5 @@ func main() {
 		}
 	}
 
-	doPing(data, *count)
+	doPing(data)
 }
