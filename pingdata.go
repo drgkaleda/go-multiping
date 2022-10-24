@@ -15,7 +15,7 @@ type PingClient interface {
 
 // A single host ping statistics
 type PingStats struct {
-	sequence int
+	sequence uint16
 	tx       uint
 	rx       uint
 	dup      uint

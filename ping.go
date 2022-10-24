@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"math/rand"
 	"net"
 	"net/netip"
 	"syscall"
@@ -22,7 +23,7 @@ var errInvalidIpAddr = errors.New("invalid ip address")
 //  * make all functions private
 
 // NewPinger returns a new Pinger instance
-func NewPinger(network, protocol string, id int) *Pinger {
+func NewPinger(network, protocol string, id uint16) *Pinger {
 	p := &Pinger{
 		Size: timeSliceLength,
 
@@ -30,6 +31,8 @@ func NewPinger(network, protocol string, id int) *Pinger {
 		ipaddr:   nil,
 		network:  network,
 		protocol: protocol,
+
+		Tracker: int64(rand.Uint64()),
 	}
 	return p
 }
@@ -44,7 +47,7 @@ type Pinger struct {
 
 	ipaddr *netip.Addr
 
-	id int
+	id uint16
 	// network is one of "ip", "ip4", or "ip6".
 	network string
 	// protocol is "icmp" or "udp".
@@ -92,9 +95,25 @@ func (p *Pinger) Privileged() bool {
 	return p.protocol == "icmp"
 }
 
-func (p *Pinger) SendICMP(sequence int) error {
+func (p *Pinger) SendICMP(sequence uint16) error {
+	var dst net.Addr
+	if p.protocol == "udp" {
+		dst = &net.UDPAddr{IP: p.ipaddr.AsSlice(), Zone: p.ipaddr.Zone()}
+	} else {
+		dst = &net.IPAddr{IP: p.ipaddr.AsSlice()}
+	}
+
+	msgBytes, err := p.prepareICMP(sequence)
+	if err != nil {
+		return err
+	}
+
+	return p.sendICMP(msgBytes, dst)
+}
+
+func (p *Pinger) prepareICMP(sequence uint16) ([]byte, error) {
 	if p.ipaddr == nil {
-		return errInvalidIpAddr
+		return nil, errInvalidIpAddr
 	}
 	var typ icmp.Type
 	if p.ipaddr.Is4() {
@@ -103,21 +122,14 @@ func (p *Pinger) SendICMP(sequence int) error {
 		typ = ipv6.ICMPTypeEchoRequest
 	}
 
-	var dst net.Addr
-	if p.protocol == "udp" {
-		dst = &net.UDPAddr{IP: p.ipaddr.AsSlice(), Zone: p.ipaddr.Zone()}
-	} else {
-		dst = &net.IPAddr{IP: p.ipaddr.AsSlice()}
-	}
-
 	t := append(timeToBytes(time.Now()), intToBytes(p.Tracker)...)
 	if remainSize := p.Size - timeSliceLength - trackerLength; remainSize > 0 {
 		t = append(t, bytes.Repeat([]byte{1}, remainSize)...)
 	}
 
 	body := &icmp.Echo{
-		ID:   p.id,
-		Seq:  sequence,
+		ID:   int(p.id),     // ICMP packet's id field is uint16, not sure why Echo struct has int there
+		Seq:  int(sequence), // ICMP packet's sequence field is uint16, not sure why Echo struct has int there
 		Data: t,
 	}
 
@@ -127,26 +139,22 @@ func (p *Pinger) SendICMP(sequence int) error {
 		Body: body,
 	}
 
-	msgBytes, err := msg.Marshal(nil)
-	if err != nil {
-		return err
-	}
+	return msg.Marshal(nil)
+}
 
+func (p *Pinger) sendICMP(msgBytes []byte, dst net.Addr) error {
+	var err error
 	for {
 		if p.ipaddr.Is4() {
-			if _, err := p.conn4.WriteTo(msgBytes, dst); err != nil {
-				if neterr, ok := err.(*net.OpError); ok {
-					if neterr.Err == syscall.ENOBUFS {
-						continue
-					}
-				}
-			}
+			_, err = p.conn4.WriteTo(msgBytes, dst)
 		} else {
-			if _, err := p.conn6.WriteTo(msgBytes, dst); err != nil {
-				if neterr, ok := err.(*net.OpError); ok {
-					if neterr.Err == syscall.ENOBUFS {
-						continue
-					}
+			_, err = p.conn6.WriteTo(msgBytes, dst)
+		}
+
+		if err != nil {
+			if neterr, ok := err.(*net.OpError); ok {
+				if neterr.Err == syscall.ENOBUFS {
+					continue
 				}
 			}
 		}
@@ -154,7 +162,7 @@ func (p *Pinger) SendICMP(sequence int) error {
 		break
 	}
 
-	return nil
+	return err
 }
 
 func bytesToTime(b []byte) time.Time {

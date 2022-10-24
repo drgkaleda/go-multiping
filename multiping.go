@@ -47,8 +47,8 @@ type MultiPing struct {
 	pinger   *Pinger
 	pingData *PingData
 
-	id       int
-	sequence int    // ICMP seq number. Incremented on every ping
+	id       uint16
+	sequence uint16 // ICMP seq number. Incremented on every ping
 	network  string // one of "ip", "ip4", or "ip6"
 	protocol string // protocol is "icmp" or "udp".
 	conn4    *icmp.PacketConn
@@ -64,7 +64,7 @@ func New(privileged bool) (*MultiPing, error) {
 	rand.Seed(time.Now().UnixNano())
 	mp := &MultiPing{
 		Timeout:  time.Second,
-		id:       rand.Intn(0xffff),
+		id:       uint16(rand.Intn(0xffff)),
 		network:  "ip",
 		protocol: protocol,
 		Tracker:  rand.Int63(),
@@ -81,8 +81,9 @@ func New(privileged bool) (*MultiPing, error) {
 		return nil, err
 	}
 
-	// Reset sequence. It will be incremented in mp.restart on every ping
-	mp.sequence = 0
+	// Sequence counter. It will be incremented in mp.restart on every ping
+	// Start with quite big initial value, so overwrap will occure fast (easier debugin)
+	mp.sequence = 0xfff0
 
 	return mp, nil
 }
@@ -107,6 +108,11 @@ func (mp *MultiPing) restart() (err error) {
 	mp.pinger.conn4 = mp.conn4
 	mp.pinger.conn6 = mp.conn6
 	mp.sequence++
+	// I use zero sequence number in statistics struct
+	// to detect duplicates, thus don't use it as valid sequence number
+	if mp.sequence == 0 {
+		mp.sequence++
+	}
 
 	return nil
 }
@@ -231,7 +237,7 @@ func (mp *MultiPing) batchRecvICMP(wg *sync.WaitGroup, proto ProtocolVersion) {
 
 		// Error reeading from connection. Can happen one of 2:
 		//  * connections are closed after context timeout (most probably)
-		//  * other unhanled erros (when can they happen?)
+		//  * other unhandled erros (when can they happen?)
 		// In either case terminate and exit
 		if err != nil {
 			return
@@ -291,7 +297,7 @@ func (mp *MultiPing) processPacket(wait *sync.WaitGroup, recv *packet) {
 	// If we are priviledged, we can match icmp.ID
 	if mp.protocol == "icmp" {
 		// Check if reply from same ID
-		if pkt.ID != mp.id {
+		if uint16(pkt.ID) != mp.id {
 			return
 		}
 	}
@@ -308,7 +314,7 @@ func (mp *MultiPing) processPacket(wait *sync.WaitGroup, recv *packet) {
 	}
 
 	if stats, ok := mp.pingData.entries[recv.src]; ok {
-		if stats.sequence == pkt.Seq {
+		if stats.sequence == uint16(pkt.Seq) {
 			stats.sequence = 0
 			stats.rtt = time.Since(timestamp)
 			stats.avgRtt = (time.Duration(stats.rx)*stats.avgRtt + stats.rtt) / time.Duration(stats.rx+1)
