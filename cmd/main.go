@@ -25,7 +25,7 @@ var verbose = logLevelNone
 var count = 5
 
 func doPing(data *pingdata.PingData) error {
-	mp, err := multiping.New(false)
+	mp, err := multiping.New(true)
 	if err != nil {
 		return err
 	}
@@ -141,5 +141,8 @@ func main() {
 		}
 	}
 
-	doPing(data)
+	err := doPing(data)
+	if err != nil {
+		fmt.Println("Ping error", err)
+	}
 }
