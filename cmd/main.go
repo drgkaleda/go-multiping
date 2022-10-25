@@ -25,9 +25,14 @@ var verbose = logLevelNone
 var count = 5
 
 func doPing(data *pingdata.PingData) error {
+	// First try privileged
 	mp, err := multiping.New(true)
 	if err != nil {
-		return err
+		// if failed - try fallback to non privileged
+		mp, err = multiping.New(false)
+		if err != nil {
+			return nil
+		}
 	}
 
 	fmt.Println("Ping results:")
