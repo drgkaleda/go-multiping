@@ -7,11 +7,6 @@ import (
 	"time"
 )
 
-// Unified interface to process ping data
-type PingClient interface {
-	PingProcess(pr *PingData)
-}
-
 // Ping data. Holds host information and ping statistics.
 // Use Add, Get and Iterate functions. No internal logic will be exposed.
 type PingData struct {
