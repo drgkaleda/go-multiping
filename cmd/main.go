@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/drgkaleda/go-multiping"
+	"github.com/drgkaleda/go-multiping/pingdata"
 )
 
 const lineSep = "- - - - - - - - - - - - - - - - - - - - - - - - - -"
@@ -22,7 +23,7 @@ const (
 var verbose = logLevelNone
 var count = 5
 
-func doPing(data *multiping.PingData) error {
+func doPing(data *pingdata.PingData) error {
 	mp, err := multiping.New(false)
 	if err != nil {
 		return err
@@ -45,7 +46,7 @@ func doPing(data *multiping.PingData) error {
 			fmt.Print("Ping lost: ")
 		}
 		// Print results
-		data.Iterate(func(ip netip.Addr, val multiping.PingStats) {
+		data.Iterate(func(ip netip.Addr, val *pingdata.PingStats) {
 			latencySum += val.Latency()
 			if val.Loss() > 0 {
 				lossCount++
@@ -95,7 +96,7 @@ func main() {
 	flag.IntVar(&verbose, "v", logLevelNone, "Verbose logging level [0|1|2]")
 
 	flag.Parse()
-	data := multiping.NewPingData()
+	data := pingdata.NewPingData()
 
 	if fileName != nil && len(*fileName) > 0 {
 		file, err := os.Open(*fileName)
