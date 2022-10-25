@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/netip"
 	"os"
+	"time"
 
 	"github.com/drgkaleda/go-multiping"
 	"github.com/drgkaleda/go-multiping/pingdata"
@@ -86,7 +87,11 @@ func doPing(data *pingdata.PingData) error {
 			data.Count(), lossCount, latencySum/float32(data.Count()), dupCount)
 
 		data.Reset()
+
+		// Sleep before next iteration
+		time.Sleep(time.Second)
 	}
+
 	return nil
 }
 
