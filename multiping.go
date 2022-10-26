@@ -38,7 +38,11 @@ var (
 )
 
 type MultiPing struct {
+	// Locks MultiPing to protect internal members
 	sync.RWMutex
+
+	// Sync internal goroutines
+	wg sync.WaitGroup
 
 	// Timeout specifies a timeout before ping exits, regardless of how many
 	// packets have been received. Default is 1s.
@@ -59,6 +63,7 @@ type MultiPing struct {
 	protocol string // protocol is "icmp" or "udp".
 	conn4    *icmp.PacketConn
 	conn6    *icmp.PacketConn
+	rxChan   chan *pinger.Packet
 }
 
 func New(privileged bool) (*MultiPing, error) {
@@ -119,6 +124,8 @@ func (mp *MultiPing) restart() (err error) {
 		mp.sequence++
 	}
 
+	mp.rxChan = make(chan *pinger.Packet)
+
 	return nil
 }
 
@@ -134,6 +141,9 @@ func (mp *MultiPing) close() {
 
 // cleanup cannot be done in close, because some goroutines may be using struct members
 func (mp *MultiPing) cleanup() {
+	// Close channels
+	close(mp.rxChan)
+
 	// invalidate connections
 	mp.conn4 = nil
 	mp.conn6 = nil
@@ -163,24 +173,28 @@ func (mp *MultiPing) Ping(data *pingdata.PingData) {
 	// Some subfunctions in goroutines will need this pointer to store ping results
 	mp.pingData = data
 
-	var wg sync.WaitGroup
-
 	mp.ctx, mp.cancel = context.WithTimeout(context.Background(), mp.Timeout)
 	defer mp.cancel()
 
+	// This goroutine depends on rxChan and no need to add it to workgroup
+	// It will terminate on channel close
+	go mp.batchProcessPacket()
+
 	if mp.conn4 != nil {
-		wg.Add(1)
-		go mp.batchRecvICMP(&wg, pinger.ProtocolIpv4)
+		mp.wg.Add(1)
+		mp.conn4.SetReadDeadline(time.Now().Add(mp.Timeout))
+		go mp.batchRecvICMP(pinger.ProtocolIpv4)
 	}
 	if mp.conn6 != nil {
-		wg.Add(1)
-		go mp.batchRecvICMP(&wg, pinger.ProtocolIpv6)
+		mp.wg.Add(1)
+		mp.conn6.SetReadDeadline(time.Now().Add(mp.Timeout))
+		go mp.batchRecvICMP(pinger.ProtocolIpv6)
 	}
 
 	// Sender goroutine
-	wg.Add(1)
+	mp.wg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer mp.wg.Done()
 		mp.pingData.Iterate(func(addr netip.Addr, stats *pingdata.PingStats) {
 			mp.pinger.SetIPAddr(&addr)
 			stats.Send(mp.sequence)
@@ -195,25 +209,15 @@ func (mp *MultiPing) Ping(data *pingdata.PingData) {
 	mp.close()
 
 	// wait for all goroutines to terminate
-	wg.Wait()
+	mp.wg.Wait()
 
 	mp.cleanup()
 }
 
-func (mp *MultiPing) batchRecvICMP(wg *sync.WaitGroup, proto pinger.ProtocolVersion) {
-
-	var packetsWait sync.WaitGroup
-
+func (mp *MultiPing) batchRecvICMP(proto pinger.ProtocolVersion) {
 	defer func() {
-		packetsWait.Wait()
-		wg.Done()
+		mp.wg.Done()
 	}()
-
-	if proto == pinger.ProtocolIpv4 {
-		mp.conn4.SetReadDeadline(time.Now().Add(mp.Timeout))
-	} else {
-		mp.conn6.SetReadDeadline(time.Now().Add(mp.Timeout))
-	}
 
 	for {
 		pkt, err := mp.pinger.RecvPacket(proto)
@@ -221,22 +225,21 @@ func (mp *MultiPing) batchRecvICMP(wg *sync.WaitGroup, proto pinger.ProtocolVers
 			return
 		}
 
-		packetsWait.Add(1)
-		go mp.processPacket(&packetsWait, pkt)
+		mp.rxChan <- pkt
 	}
 }
 
 // This function runs in goroutine and nobody is interested in return errors
 // Discard errors silently
-func (mp *MultiPing) processPacket(wait *sync.WaitGroup, recv *pinger.Packet) {
-	defer wait.Done()
+func (mp *MultiPing) batchProcessPacket() {
+	for recv := range mp.rxChan {
+		pingStats := mp.pinger.ParsePacket(recv)
+		if pingStats.Tracker != mp.Tracker {
+			continue
+		}
 
-	pingStats := mp.pinger.ParsePacket(recv)
-	if pingStats.Tracker != mp.Tracker {
-		return
-	}
-
-	if stats, ok := mp.pingData.Get(recv.Src); ok {
-		stats.Recv(pingStats.Seq, pingStats.RTT)
+		if stats, ok := mp.pingData.Get(recv.Src); ok {
+			stats.Recv(pingStats.Seq, pingStats.RTT)
+		}
 	}
 }
