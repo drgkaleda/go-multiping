@@ -68,7 +68,7 @@ func (p *Pinger) RecvPacket(proto ProtocolVersion) (*Packet, error) {
 		return nil, errInvalidAddr
 	}
 
-	return &Packet{Bytes: bytes, Len: n, TTL: ttl, Proto: proto, Src: addr}, nil
+	return &Packet{Bytes: bytes, Len: n, TTL: ttl, Proto: proto, Addr: addr}, nil
 }
 
 func (p *Pinger) ParsePacket(recv *Packet) IcmpStats {

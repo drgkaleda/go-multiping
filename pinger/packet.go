@@ -6,11 +6,11 @@ import (
 )
 
 type Packet struct {
-	Bytes []byte
-	Len   int
-	TTL   int
-	Proto ProtocolVersion
-	Src   netip.Addr
+	Proto ProtocolVersion // protocol: 4=IPv4, 6=IPv6
+	Bytes []byte          // Marshaled package
+	Len   int             // length of package
+	TTL   int             // TTL of the packet (currently unused)
+	Addr  netip.Addr      // Dest address for sending package and Src address ro received
 }
 
 type IcmpStats struct {

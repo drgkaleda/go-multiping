@@ -238,7 +238,7 @@ func (mp *MultiPing) batchProcessPacket() {
 			continue
 		}
 
-		if stats, ok := mp.pingData.Get(recv.Src); ok {
+		if stats, ok := mp.pingData.Get(recv.Addr); ok {
 			stats.Recv(pingStats.Seq, pingStats.RTT)
 		}
 	}
