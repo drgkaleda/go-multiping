@@ -14,7 +14,7 @@ package multiping
  * They run in internal loop, cancel that loop after timeout. They *can* be used, but you have to adjust your
  * code to their style. Instead I wanted a pinger, that can ping multipple hosts at a time and be robust.
  * I don't think its a problem for ping user to run it in a loop and don't want any hidden logic.
- * So this ping is loosely based on above mentioned projects. It can ping multipple clients.
+ * So this ping is loosely based on above mentioned projects. It can ping multiple clients.
  * And is cholesterol free.
  **/
 
