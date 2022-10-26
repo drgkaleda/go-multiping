@@ -10,6 +10,17 @@ import (
 	"golang.org/x/net/ipv6"
 )
 
+func (p *Pinger) RecvICMP(proto ProtocolVersion) IcmpStats {
+	pkt, err := p.RecvPacket(proto)
+	if err != nil {
+		return IcmpStats{
+			Valid: false,
+		}
+	}
+
+	return p.ParsePacket(pkt)
+}
+
 func (p *Pinger) RecvPacket(proto ProtocolVersion) (*Packet, error) {
 	var n, ttl int
 	var err error
