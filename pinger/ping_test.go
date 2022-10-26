@@ -24,14 +24,13 @@ func TestPingPacket(t *testing.T) {
 		if pinger == nil {
 			t.Fatalf("Could not create pinger")
 		}
-		pinger.SetIPAddr(&ip)
 
-		msgBytes, err := pinger.prepareICMP(seq)
+		txPkt, err := pinger.PrepareICMP(ip, seq)
 		if err != nil {
 			t.Fatalf("Icmp prepare %s", err)
 		}
 
-		packet, err := icmp.ParseMessage(ProtocolICMP, msgBytes)
+		packet, err := icmp.ParseMessage(ProtocolICMP, txPkt.Bytes)
 		if err != nil {
 			t.Fatalf("Icmp parse %s", err)
 		}

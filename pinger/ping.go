@@ -2,24 +2,11 @@
 package pinger
 
 import (
-	"bytes"
-	"errors"
 	"math/rand"
-	"net"
 	"net/netip"
-	"syscall"
-	"time"
 
 	"golang.org/x/net/icmp"
-	"golang.org/x/net/ipv4"
-	"golang.org/x/net/ipv6"
 )
-
-var errInvalidIpAddr = errors.New("invalid ip address")
-
-// TODO think about one of:
-//  * move pinger to separate package
-//  * make all functions private
 
 // NewPinger returns a new Pinger instance
 func NewPinger(network, protocol string, id uint16) *Pinger {
@@ -98,74 +85,4 @@ func (p *Pinger) SetPrivileged(privileged bool) {
 // Privileged returns whether pinger is running in privileged mode.
 func (p *Pinger) Privileged() bool {
 	return p.protocol == "icmp"
-}
-
-func (p *Pinger) SendICMP(sequence uint16) error {
-	var dst net.Addr
-	if p.protocol == "udp" {
-		dst = &net.UDPAddr{IP: p.ipaddr.AsSlice(), Zone: p.ipaddr.Zone()}
-	} else {
-		dst = &net.IPAddr{IP: p.ipaddr.AsSlice()}
-	}
-
-	msgBytes, err := p.prepareICMP(sequence)
-	if err != nil {
-		return err
-	}
-
-	return p.sendICMP(msgBytes, dst)
-}
-
-func (p *Pinger) prepareICMP(sequence uint16) ([]byte, error) {
-	if p.ipaddr == nil {
-		return nil, errInvalidIpAddr
-	}
-	var typ icmp.Type
-	if p.ipaddr.Is4() {
-		typ = ipv4.ICMPTypeEcho
-	} else {
-		typ = ipv6.ICMPTypeEchoRequest
-	}
-
-	t := append(timeToBytes(time.Now()), intToBytes(p.Tracker)...)
-	if remainSize := p.Size - timeSliceLength - trackerLength; remainSize > 0 {
-		t = append(t, bytes.Repeat([]byte{1}, remainSize)...)
-	}
-
-	body := &icmp.Echo{
-		ID:   int(p.id),     // ICMP packet's id field is uint16, not sure why Echo struct has int there
-		Seq:  int(sequence), // ICMP packet's sequence field is uint16, not sure why Echo struct has int there
-		Data: t,
-	}
-
-	msg := &icmp.Message{
-		Type: typ,
-		Code: 0,
-		Body: body,
-	}
-
-	return msg.Marshal(nil)
-}
-
-func (p *Pinger) sendICMP(msgBytes []byte, dst net.Addr) error {
-	var err error
-	for {
-		if p.ipaddr.Is4() {
-			_, err = p.conn4.WriteTo(msgBytes, dst)
-		} else {
-			_, err = p.conn6.WriteTo(msgBytes, dst)
-		}
-
-		if err != nil {
-			if neterr, ok := err.(*net.OpError); ok {
-				if neterr.Err == syscall.ENOBUFS {
-					continue
-				}
-			}
-		}
-
-		break
-	}
-
-	return err
 }
