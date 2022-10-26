@@ -1,7 +1,6 @@
 package pinger
 
 import (
-	"errors"
 	"net"
 	"net/netip"
 	"time"
@@ -9,11 +8,6 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
-)
-
-var (
-	errInvalidConn = errors.New("invalid connection")
-	errInvalidAddr = errors.New("invalid address")
 )
 
 func (p *Pinger) RecvPacket(proto ProtocolVersion) (*Packet, error) {
