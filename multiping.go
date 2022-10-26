@@ -21,7 +21,6 @@ package multiping
 import (
 	"context"
 	"math/rand"
-	"net/netip"
 	"sync"
 	"time"
 
@@ -64,6 +63,7 @@ type MultiPing struct {
 	conn4    *icmp.PacketConn
 	conn6    *icmp.PacketConn
 	rxChan   chan *pinger.Packet
+	txChan   chan *pinger.Packet
 }
 
 func New(privileged bool) (*MultiPing, error) {
@@ -88,7 +88,7 @@ func New(privileged bool) (*MultiPing, error) {
 	// try initialise connections to test that everything's working
 	err := mp.restart()
 	if err != nil {
-		mp.close()
+		mp.closeConnection()
 		return nil, err
 	}
 
@@ -125,12 +125,13 @@ func (mp *MultiPing) restart() (err error) {
 	}
 
 	mp.rxChan = make(chan *pinger.Packet)
+	mp.txChan = make(chan *pinger.Packet)
 
 	return nil
 }
 
 // closes active connections
-func (mp *MultiPing) close() {
+func (mp *MultiPing) closeConnection() {
 	if mp.conn4 != nil {
 		mp.conn4.Close()
 	}
@@ -141,7 +142,8 @@ func (mp *MultiPing) close() {
 
 // cleanup cannot be done in close, because some goroutines may be using struct members
 func (mp *MultiPing) cleanup() {
-	// Close channels
+	// Close rx channel.
+	// Tx channel is closed in batchPrepareIcmp()
 	close(mp.rxChan)
 
 	// invalidate connections
@@ -153,93 +155,4 @@ func (mp *MultiPing) cleanup() {
 	mp.pingData = nil
 	// Invalidate IP address
 	mp.pinger.SetIPAddr(nil)
-}
-
-// Ping is blocking function and runs for mp.Timeout time and pings all hosts in data
-func (mp *MultiPing) Ping(data *pingdata.PingData) {
-	if data.Count() == 0 {
-		return
-	}
-
-	// Lock the pinger - its instance may be reused by several clients
-	mp.Lock()
-	defer mp.Unlock()
-
-	err := mp.restart()
-	if err != nil {
-		return
-	}
-
-	// Some subfunctions in goroutines will need this pointer to store ping results
-	mp.pingData = data
-
-	mp.ctx, mp.cancel = context.WithTimeout(context.Background(), mp.Timeout)
-	defer mp.cancel()
-
-	// This goroutine depends on rxChan and no need to add it to workgroup
-	// It will terminate on channel close
-	go mp.batchProcessPacket()
-
-	if mp.conn4 != nil {
-		mp.wg.Add(1)
-		mp.conn4.SetReadDeadline(time.Now().Add(mp.Timeout))
-		go mp.batchRecvICMP(pinger.ProtocolIpv4)
-	}
-	if mp.conn6 != nil {
-		mp.wg.Add(1)
-		mp.conn6.SetReadDeadline(time.Now().Add(mp.Timeout))
-		go mp.batchRecvICMP(pinger.ProtocolIpv6)
-	}
-
-	// Sender goroutine
-	mp.wg.Add(1)
-	go func() {
-		defer mp.wg.Done()
-		mp.pingData.Iterate(func(addr netip.Addr, stats *pingdata.PingStats) {
-			mp.pinger.SetIPAddr(&addr)
-			stats.Send(mp.sequence)
-
-			mp.pinger.SendICMP(mp.sequence)
-			time.Sleep(time.Millisecond)
-		})
-	}()
-
-	// wait for timeout and close connections
-	<-mp.ctx.Done()
-	mp.close()
-
-	// wait for all goroutines to terminate
-	mp.wg.Wait()
-
-	mp.cleanup()
-}
-
-func (mp *MultiPing) batchRecvICMP(proto pinger.ProtocolVersion) {
-	defer func() {
-		mp.wg.Done()
-	}()
-
-	for {
-		pkt, err := mp.pinger.RecvPacket(proto)
-		if err != nil {
-			return
-		}
-
-		mp.rxChan <- pkt
-	}
-}
-
-// This function runs in goroutine and nobody is interested in return errors
-// Discard errors silently
-func (mp *MultiPing) batchProcessPacket() {
-	for recv := range mp.rxChan {
-		pingStats := mp.pinger.ParsePacket(recv)
-		if pingStats.Tracker != mp.Tracker {
-			continue
-		}
-
-		if stats, ok := mp.pingData.Get(recv.Addr); ok {
-			stats.Recv(pingStats.Seq, pingStats.RTT)
-		}
-	}
 }
