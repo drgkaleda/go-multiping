@@ -1,12 +1,15 @@
-package multiping
+package pinger
 
 import (
+	"fmt"
 	"math/rand"
 	"net/netip"
+	"sync"
 	"testing"
 	"time"
 
 	"golang.org/x/net/icmp"
+	"golang.org/x/net/ipv4"
 )
 
 func TestPingPacket(t *testing.T) {
@@ -28,7 +31,7 @@ func TestPingPacket(t *testing.T) {
 			t.Fatalf("Icmp prepare %s", err)
 		}
 
-		packet, err := icmp.ParseMessage(protocolICMP, msgBytes)
+		packet, err := icmp.ParseMessage(ProtocolICMP, msgBytes)
 		if err != nil {
 			t.Fatalf("Icmp parse %s", err)
 		}
@@ -62,5 +65,48 @@ func TestPingPacket(t *testing.T) {
 		if seq == 0xffff {
 			break
 		}
+	}
+}
+
+const testSeq = 3131
+
+func TestSendRecv(t *testing.T) {
+	p := NewPinger("ip", "udp", 111)
+
+	conn4, err := icmp.ListenPacket("udp4", "")
+	if err != nil {
+		t.Fatal("UDP connection create failed")
+	}
+	conn4.IPv4PacketConn().SetControlMessage(ipv4.FlagTTL, true)
+
+	p.SetConns(conn4, nil)
+	conn4.SetReadDeadline(time.Now().Add(time.Second))
+
+	var mainErr error
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		pkt, err := p.RecvPacket(ProtocolIpv4)
+		if err != nil {
+			mainErr = fmt.Errorf("Receive failed: %s", err)
+			return
+		}
+		pingStats := p.ParsePacket(pkt)
+
+		if pingStats.Seq != testSeq {
+			mainErr = fmt.Errorf("Invalid sequence. Expected: %d received: %d", testSeq, pingStats.Seq)
+			return
+		}
+	}()
+
+	localhost := netip.MustParseAddr("127.0.0.4")
+	p.SetIPAddr(&localhost)
+	p.SendICMP(testSeq)
+
+	wg.Wait()
+	if mainErr != nil {
+		t.Fatal(mainErr.Error())
 	}
 }
