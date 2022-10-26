@@ -153,6 +153,4 @@ func (mp *MultiPing) cleanup() {
 
 	// Invalidate pingData pointer (prevent from possible data corruption in future)
 	mp.pingData = nil
-	// Invalidate IP address
-	mp.pinger.SetIPAddr(nil)
 }

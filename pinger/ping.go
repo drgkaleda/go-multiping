@@ -3,7 +3,6 @@ package pinger
 
 import (
 	"math/rand"
-	"net/netip"
 
 	"golang.org/x/net/icmp"
 )
@@ -14,7 +13,6 @@ func NewPinger(network, protocol string, id uint16) *Pinger {
 		Size: timeSliceLength,
 
 		id:       id,
-		ipaddr:   nil,
 		network:  network,
 		protocol: protocol,
 
@@ -31,8 +29,6 @@ type Pinger struct {
 	// Tracker: Used to uniquely identify packet when non-priviledged
 	Tracker int64
 
-	ipaddr *netip.Addr
-
 	id uint16
 	// network is one of "ip", "ip4", or "ip6".
 	network string
@@ -44,24 +40,6 @@ type Pinger struct {
 
 	//conn6 is ipv6 icmp PacketConn
 	conn6 *icmp.PacketConn
-}
-
-// SetIPAddr sets the ip address of the target host.
-func (p *Pinger) SetIPAddr(ipaddr *netip.Addr) {
-	p.ipaddr = ipaddr
-}
-
-// IPAddr returns the ip address of the target host.
-func (p *Pinger) IPAddr() *netip.Addr {
-	return p.ipaddr
-}
-
-// Addr returns the string ip address of the target host.
-func (p *Pinger) Addr() string {
-	if p.ipaddr != nil {
-		return p.ipaddr.String()
-	}
-	return ""
 }
 
 // SetConns setups IPv4 and IPv6 connections to pinger

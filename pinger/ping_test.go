@@ -100,9 +100,7 @@ func TestSendRecv(t *testing.T) {
 		}
 	}()
 
-	localhost := netip.MustParseAddr("127.0.0.4")
-	p.SetIPAddr(&localhost)
-	p.SendICMP(testSeq)
+	p.SendICMP(netip.MustParseAddr("127.0.0.1"), testSeq)
 
 	wg.Wait()
 	if mainErr != nil {

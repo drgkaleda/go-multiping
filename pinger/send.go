@@ -12,8 +12,8 @@ import (
 	"golang.org/x/net/ipv6"
 )
 
-func (p *Pinger) SendICMP(sequence uint16) error {
-	pkt, err := p.PrepareICMP(*p.ipaddr, sequence)
+func (p *Pinger) SendICMP(addr netip.Addr, sequence uint16) error {
+	pkt, err := p.PrepareICMP(addr, sequence)
 
 	if err != nil {
 		return err
