@@ -45,9 +45,15 @@ func (p *Pinger) PrepareICMP(addr netip.Addr, seq uint16) (*Packet, error) {
 	}
 
 	if addr.Is4() {
+		if p.conn4 == nil {
+			return nil, errInvalidConn
+		}
 		msg.Type = ipv4.ICMPTypeEcho
 		pkt.Proto = ProtocolIpv4
 	} else {
+		if p.conn6 == nil {
+			return nil, errInvalidConn
+		}
 		msg.Type = ipv6.ICMPTypeEchoRequest
 		pkt.Proto = ProtocolIpv6
 	}
@@ -73,7 +79,7 @@ func (p *Pinger) SendPacket(pkt *Packet) error {
 	// Some retries in case of ENOBUFS may occure
 	// Do not retry infinitely
 	for tries := 3; tries > 0; tries-- {
-		if p.ipaddr.Is4() {
+		if pkt.Proto == ProtocolIpv4 {
 			_, err = p.conn4.WriteTo(pkt.Bytes, dst)
 		} else {
 			_, err = p.conn6.WriteTo(pkt.Bytes, dst)
