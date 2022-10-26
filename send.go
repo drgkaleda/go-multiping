@@ -4,6 +4,7 @@ import (
 	"net/netip"
 
 	"github.com/drgkaleda/go-multiping/pingdata"
+	"github.com/drgkaleda/go-multiping/pinger"
 )
 
 func (mp *MultiPing) batchPrepareIcmp() {
@@ -26,7 +27,9 @@ func (mp *MultiPing) batchSendIcmp() {
 	for pkt := range mp.txChan {
 		err = mp.pinger.SendPacket(pkt)
 		if err != nil {
-			break
+			if err == pinger.ErrInvalidConn {
+				break
+			}
 		}
 	}
 }

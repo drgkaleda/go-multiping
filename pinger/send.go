@@ -75,12 +75,12 @@ func (p *Pinger) SendPacket(pkt *Packet) error {
 	for tries := 3; tries > 0; tries-- {
 		if pkt.Proto == ProtocolIpv4 {
 			if p.conn4 == nil {
-				return errInvalidConn
+				return ErrInvalidConn
 			}
 			_, err = p.conn4.WriteTo(pkt.Bytes, dst)
 		} else {
 			if p.conn6 == nil {
-				return errInvalidConn
+				return ErrInvalidConn
 			}
 			_, err = p.conn6.WriteTo(pkt.Bytes, dst)
 		}

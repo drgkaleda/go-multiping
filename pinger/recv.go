@@ -29,7 +29,7 @@ func (p *Pinger) RecvPacket(proto ProtocolVersion) (*Packet, error) {
 
 	if proto == ProtocolIpv4 {
 		if p.conn4 == nil {
-			return nil, errInvalidConn
+			return nil, ErrInvalidConn
 		}
 		var cm *ipv4.ControlMessage
 		n, cm, src, err = p.conn4.IPv4PacketConn().ReadFrom(bytes)
@@ -38,7 +38,7 @@ func (p *Pinger) RecvPacket(proto ProtocolVersion) (*Packet, error) {
 		}
 	} else {
 		if p.conn4 == nil {
-			return nil, errInvalidConn
+			return nil, ErrInvalidConn
 		}
 
 		var cm *ipv6.ControlMessage
@@ -53,7 +53,7 @@ func (p *Pinger) RecvPacket(proto ProtocolVersion) (*Packet, error) {
 	//  * other unhandled erros (when can they happen?)
 	// In either case terminate and exit
 	if err != nil {
-		return nil, errInvalidConn
+		return nil, ErrInvalidConn
 	}
 
 	// TODO: maybe there is more effective way to get netip.Addr from PacketConn ?
@@ -61,7 +61,7 @@ func (p *Pinger) RecvPacket(proto ProtocolVersion) (*Packet, error) {
 	if p.protocol == "udp" {
 		ip, _, err = net.SplitHostPort(src.String())
 		if err != nil {
-			return nil, errInvalidAddr
+			return nil, ErrInvalidAddr
 		}
 	} else {
 		ip = src.String()
@@ -70,7 +70,7 @@ func (p *Pinger) RecvPacket(proto ProtocolVersion) (*Packet, error) {
 	var addr netip.Addr
 	addr, err = netip.ParseAddr(ip)
 	if err != nil {
-		return nil, errInvalidAddr
+		return nil, ErrInvalidAddr
 	}
 
 	return &Packet{Bytes: bytes, Len: n, TTL: ttl, Proto: proto, Addr: addr}, nil

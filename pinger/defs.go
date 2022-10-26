@@ -17,6 +17,6 @@ const (
 )
 
 var (
-	errInvalidConn = errors.New("invalid connection")
-	errInvalidAddr = errors.New("invalid address")
+	ErrInvalidConn = errors.New("invalid connection")
+	ErrInvalidAddr = errors.New("invalid address")
 )
