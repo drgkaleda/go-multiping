@@ -1,6 +1,8 @@
 package multiping
 
-import "github.com/drgkaleda/go-multiping/pinger"
+import (
+	"github.com/drgkaleda/go-multiping/pinger"
+)
 
 func (mp *MultiPing) batchRecvICMP(proto pinger.ProtocolVersion) {
 	defer func() {
@@ -10,7 +12,9 @@ func (mp *MultiPing) batchRecvICMP(proto pinger.ProtocolVersion) {
 	for {
 		pkt, err := mp.pinger.RecvPacket(proto)
 		if err != nil {
-			return
+			if err == pinger.ErrInvalidConn {
+				return
+			}
 		}
 
 		mp.rxChan <- pkt
