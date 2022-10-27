@@ -72,7 +72,7 @@ func (p *Pinger) SendPacket(pkt *Packet) error {
 
 	// Some retries in case of ENOBUFS may occure
 	// Do not retry infinitely
-	for tries := 3; tries > 0; tries-- {
+	for tries := 6; tries > 0; tries-- {
 		if pkt.Proto == ProtocolIpv4 {
 			if p.conn4 == nil {
 				return ErrInvalidConn
